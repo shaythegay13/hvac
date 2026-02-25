@@ -1,12 +1,13 @@
-"""Chat endpoint — streaming SSE chat with tool-calling via OpenAI."""
+"""Chat endpoint — streaming SSE chat with tool-calling via Google Gemini."""
 
 import json
 import os
 
+import google.generativeai as genai
+from google.generativeai.types import FunctionDeclaration, Tool
+
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
-
-from openai import OpenAI
 
 from backend.db.connection import get_db
 from backend.tools.field_notes import get_field_notes
@@ -18,16 +19,15 @@ from backend.tools.send_email import send_email
 
 router = APIRouter()
 
-MODEL = "gpt-4o-mini"
+MODEL = "gemini-2.0-flash"
 
-# OpenAI function definitions
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_field_notes",
-            "description": "Search field notes for a project. Can filter by date range and keyword.",
-            "parameters": {
+# Gemini function declarations (equivalent to OpenAI tool definitions)
+GEMINI_TOOLS = [
+    Tool(function_declarations=[
+        FunctionDeclaration(
+            name="get_field_notes",
+            description="Search field notes for a project. Can filter by date range and keyword.",
+            parameters={
                 "type": "object",
                 "properties": {
                     "project_id": {"type": "string", "description": "Project ID"},
@@ -37,14 +37,11 @@ TOOLS = [
                 },
                 "required": ["project_id"],
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_labor_detail",
-            "description": "Get labor hours and costs for a project, broken down by SOV line and role.",
-            "parameters": {
+        ),
+        FunctionDeclaration(
+            name="get_labor_detail",
+            description="Get labor hours and costs for a project, broken down by SOV line and role.",
+            parameters={
                 "type": "object",
                 "properties": {
                     "project_id": {"type": "string", "description": "Project ID"},
@@ -52,14 +49,11 @@ TOOLS = [
                 },
                 "required": ["project_id"],
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_co_detail",
-            "description": "Get change order details for a project, optionally filtered by CO number.",
-            "parameters": {
+        ),
+        FunctionDeclaration(
+            name="get_co_detail",
+            description="Get change order details for a project, optionally filtered by CO number.",
+            parameters={
                 "type": "object",
                 "properties": {
                     "project_id": {"type": "string", "description": "Project ID"},
@@ -67,14 +61,11 @@ TOOLS = [
                 },
                 "required": ["project_id"],
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_rfi_detail",
-            "description": "Get RFI details for a project, optionally filtered by RFI number.",
-            "parameters": {
+        ),
+        FunctionDeclaration(
+            name="get_rfi_detail",
+            description="Get RFI details for a project, optionally filtered by RFI number.",
+            parameters={
                 "type": "object",
                 "properties": {
                     "project_id": {"type": "string", "description": "Project ID"},
@@ -82,14 +73,11 @@ TOOLS = [
                 },
                 "required": ["project_id"],
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "what_if_margin",
-            "description": "Run a what-if margin scenario: co_rejected, co_approved, or labor_recovery.",
-            "parameters": {
+        ),
+        FunctionDeclaration(
+            name="what_if_margin",
+            description="Run a what-if margin scenario: co_rejected, co_approved, or labor_recovery.",
+            parameters={
                 "type": "object",
                 "properties": {
                     "project_id": {"type": "string", "description": "Project ID"},
@@ -102,14 +90,11 @@ TOOLS = [
                 },
                 "required": ["project_id", "scenario"],
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "send_email",
-            "description": "Send a margin alert email for a project. Composes and stores the email.",
-            "parameters": {
+        ),
+        FunctionDeclaration(
+            name="send_email",
+            description="Send a margin alert email for a project. Composes and stores the email.",
+            parameters={
                 "type": "object",
                 "properties": {
                     "project_id": {"type": "string", "description": "Project ID"},
@@ -119,8 +104,8 @@ TOOLS = [
                 },
                 "required": ["project_id", "to", "subject", "body"],
             },
-        },
-    },
+        ),
+    ])
 ]
 
 TOOL_DISPATCH = {
@@ -143,7 +128,6 @@ def _load_dossier_context(project_id: str) -> str:
     if not row:
         return f"No dossier found for project {project_id}."
     dossier = json.loads(row["dossier_json"])
-    # Trim evidence to keep context lean
     for t in dossier.get("triggers", []):
         t.pop("evidence", None)
         if "reasoning" in t:
@@ -182,51 +166,66 @@ def _build_system_prompt(project_id: str | None) -> str:
     return base
 
 
+def _messages_to_gemini(messages: list) -> list:
+    """Convert OpenAI-style messages to Gemini contents format."""
+    contents = []
+    for msg in messages:
+        role = "user" if msg["role"] == "user" else "model"
+        contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+    return contents
+
+
 @router.post("/api/chat")
 async def chat(request: Request):
-    """Streaming chat endpoint using OpenAI. Expects JSON: {project_id, messages}."""
+    """Streaming chat endpoint using Google Gemini. Expects JSON: {project_id, messages}."""
     body = await request.json()
     project_id = body.get("project_id")
     messages = body.get("messages", [])
 
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = os.environ.get("GOOGLE_API_KEY")
     if not api_key:
-        return {"error": "OPENAI_API_KEY not set", "reply": _fallback_reply(messages)}
+        return {"error": "GOOGLE_API_KEY not set", "reply": _fallback_reply(messages)}
 
-    client = OpenAI(api_key=api_key)
+    genai.configure(api_key=api_key)
     system_prompt = _build_system_prompt(project_id)
 
-    # Prepend system message
-    oai_messages = [{"role": "system", "content": system_prompt}] + messages
+    model = genai.GenerativeModel(
+        model_name=MODEL,
+        tools=GEMINI_TOOLS,
+        system_instruction=system_prompt,
+    )
+
+    contents = _messages_to_gemini(messages)
 
     async def event_stream():
-        nonlocal oai_messages
+        current_contents = list(contents)
         max_iterations = 5
 
         for _ in range(max_iterations):
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=oai_messages,
-                tools=TOOLS,
-                max_tokens=2048,
-            )
+            response = model.generate_content(current_contents)
+            candidate = response.candidates[0]
+            parts = candidate.content.parts
 
-            choice = response.choices[0]
-            msg = choice.message
+            # Check for function calls
+            function_calls = [p for p in parts if hasattr(p, "function_call") and p.function_call.name]
+            text_parts = [p for p in parts if hasattr(p, "text") and p.text]
 
-            # If no tool calls, return the text
-            if not msg.tool_calls:
-                if msg.content:
-                    yield f"data: {json.dumps({'type': 'text', 'content': msg.content})}\n\n"
+            # Stream any text content
+            for part in text_parts:
+                yield f"data: {json.dumps({'type': 'text', 'content': part.text})}\n\n"
+
+            if not function_calls:
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
                 return
 
-            # Process tool calls
-            oai_messages.append(msg.model_dump())
+            # Append model response to conversation
+            current_contents.append({"role": "model", "parts": [p._pb for p in parts]})
 
-            for tool_call in msg.tool_calls:
-                fn_name = tool_call.function.name
-                fn_args = json.loads(tool_call.function.arguments)
+            # Execute tool calls and collect results
+            function_responses = []
+            for part in function_calls:
+                fn_name = part.function_call.name
+                fn_args = dict(part.function_call.args)
 
                 yield f"data: {json.dumps({'type': 'tool_call', 'name': fn_name, 'input': fn_args})}\n\n"
 
@@ -243,15 +242,16 @@ async def chat(request: Request):
                 if len(result_str) > 8000:
                     result_str = result_str[:8000] + '..."}'
 
-                oai_messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result_str,
-                })
+                function_responses.append(
+                    genai.protos.Part(
+                        function_response=genai.protos.FunctionResponse(
+                            name=fn_name,
+                            response={"result": result_str},
+                        )
+                    )
+                )
 
-            # If there was text content alongside tool calls, stream it
-            if msg.content:
-                yield f"data: {json.dumps({'type': 'text', 'content': msg.content})}\n\n"
+            current_contents.append({"role": "user", "parts": function_responses})
 
         yield f"data: {json.dumps({'type': 'text', 'content': 'Reached maximum tool call iterations.'})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
@@ -263,6 +263,6 @@ def _fallback_reply(messages: list) -> str:
     last_msg = messages[-1]["content"] if messages else ""
     return (
         f"I received your question: \"{last_msg[:100]}...\"\n\n"
-        "However, OPENAI_API_KEY is not configured. "
+        "However, GOOGLE_API_KEY is not configured. "
         "Set it in your environment to enable AI chat."
     )
