@@ -1,4 +1,6 @@
 import { streamText, tool } from "ai";
+
+export const maxDuration = 30;
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import dossiers from "@/data/dossiers.json";
