@@ -82,7 +82,7 @@ export default function ProjectPage() {
       </Link>
 
       {/* Project header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold">{dossier.name}</h2>
           <div className="text-sm text-gray-400 mt-1">
@@ -115,7 +115,7 @@ export default function ProjectPage() {
 
       {/* Email modal */}
       {emailOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] px-4">
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-1">Send Margin Report</h3>
             <p className="text-sm text-gray-400 mb-4">

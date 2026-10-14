@@ -8,7 +8,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ projectId }: ChatPanelProps) {
-  const { messages, input, handleInputChange, handleSubmit, status } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, status, error } = useChat({
     api: "/api/chat",
     body: { project_id: projectId ?? "PORTFOLIO" },
   });
@@ -20,10 +20,10 @@ export function ChatPanel({ projectId }: ChatPanelProps) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, error, isLoading]);
 
   return (
-    <div className="fixed bottom-6 right-6 w-96 h-[32rem] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl flex flex-col z-50">
+    <div className="mt-8 w-full h-96 bg-gray-900 border border-gray-700 rounded-xl shadow-xl flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-700">
         <div>
@@ -48,12 +48,12 @@ export function ChatPanel({ projectId }: ChatPanelProps) {
         )}
 
         {messages.map((msg) => (
-          <div key={msg.id}>
+          <div key={msg.id} className="flex flex-col">
             <div
-              className={`text-sm ${
+              className={`text-sm max-w-3xl ${
                 msg.role === "user"
-                  ? "ml-8 bg-blue-600/20 border border-blue-500/30 rounded-lg p-2.5"
-                  : "mr-4 bg-gray-800 rounded-lg p-2.5"
+                  ? "self-end bg-blue-600/20 border border-blue-500/30 rounded-lg p-2.5"
+                  : "self-start bg-gray-800 rounded-lg p-2.5"
               }`}
             >
               <div className="text-xs text-gray-500 mb-1">
@@ -80,6 +80,12 @@ export function ChatPanel({ projectId }: ChatPanelProps) {
           <div className="flex items-center gap-2 text-sm text-gray-400">
             <span className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
             Thinking...
+          </div>
+        )}
+
+        {error && (
+          <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5" role="alert">
+            {error.message}
           </div>
         )}
       </div>

@@ -1,30 +1,74 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchContracts, fetchPortfolio, Contract, Portfolio } from "@/lib/api";
 import { PortfolioGrid } from "@/components/portfolio-grid";
 import { ChatPanel } from "@/components/chat-panel";
+
+const SESSION_KEY = "hvac-home-state";
 
 export default function Home() {
   const [contracts, setContracts] = useState<Contract[] | null>(null);
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // The home page unmounts when a project opens. Restore the last portfolio
+  // so Back to Portfolio does not drop the analysis.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { contracts?: Contract[]; portfolio?: Portfolio | null };
+        if (Array.isArray(saved.contracts) && saved.contracts.length > 0) {
+          setContracts(saved.contracts);
+          setLoaded(true);
+          if (saved.portfolio) setPortfolio(saved.portfolio);
+        }
+      }
+    } catch {
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !loaded || !contracts) return;
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ contracts, portfolio }));
+  }, [ready, loaded, contracts, portfolio]);
 
   async function loadContracts() {
-    const data = await fetchContracts();
-    setContracts(data);
-    setLoaded(true);
+    setError(null);
+    try {
+      const data = await fetchContracts();
+      setContracts(data);
+      setLoaded(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load the portfolio");
+    }
   }
 
   async function runAnalysis() {
     setAnalyzing(true);
+    setError(null);
     try {
       const data = await fetchPortfolio();
       setPortfolio(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not run the analysis");
     } finally {
       setAnalyzing(false);
     }
+  }
+
+  if (!ready) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full" />
+      </div>
+    );
   }
 
   if (!loaded) {
@@ -41,6 +85,9 @@ export default function Home() {
         >
           Load Portfolio
         </button>
+        {error && (
+          <p className="text-sm text-red-400" role="alert">{error}</p>
+        )}
       </div>
     );
   }
@@ -49,7 +96,7 @@ export default function Home() {
     <div>
       {/* Portfolio header stats */}
       {portfolio && (
-        <div className="mb-6 grid grid-cols-4 gap-4">
+        <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
           <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
             <div className="text-sm text-gray-400">Portfolio Health</div>
             <div className="text-2xl font-bold">{portfolio.portfolio_health}/100</div>
@@ -89,6 +136,10 @@ export default function Home() {
             )}
           </button>
         </div>
+      )}
+
+      {error && (
+        <p className="mt-4 text-center text-sm text-red-400" role="alert">{error}</p>
       )}
 
       {portfolio && <ChatPanel />}
