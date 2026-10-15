@@ -19,7 +19,8 @@ from backend.tools.send_email import send_email
 
 router = APIRouter()
 
-MODEL = "gemini-2.0-flash"
+# gemini-2.0-flash shut down on 2026-06-01. Google's replacement for that id is gemini-3.6-flash.
+MODEL = "gemini-3.6-flash"
 
 # Gemini function declarations (equivalent to OpenAI tool definitions)
 GEMINI_TOOLS = [

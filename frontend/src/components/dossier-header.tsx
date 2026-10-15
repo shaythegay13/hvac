@@ -32,7 +32,7 @@ export function DossierHeader({ financials, contractValue }: DossierHeaderProps)
       </h3>
 
       {/* Margin flow */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-4 mb-6 sm:grid-cols-4">
         <div className="text-center">
           <div className="text-xs text-gray-500 mb-1">Bid Margin</div>
           <div className="text-xl font-bold">{financials.bid_margin_pct.toFixed(1)}%</div>
@@ -58,7 +58,7 @@ export function DossierHeader({ financials, contractValue }: DossierHeaderProps)
       </div>
 
       {/* Details grid */}
-      <div className="grid grid-cols-3 gap-4 text-sm">
+      <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
         <div>
           <div className="text-gray-500">Est. Cost</div>
           <div className="font-medium">{formatCurrency(financials.estimated_cost)}</div>

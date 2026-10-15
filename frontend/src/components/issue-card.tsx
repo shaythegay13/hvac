@@ -31,7 +31,7 @@ export function IssueCard({ trigger }: IssueCardProps) {
     switch (trigger.type) {
       case "LABOR_OVERRUN":
         return (
-          <div className="flex gap-4 text-sm">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <span>Burn: {m.burn_ratio}x</span>
             <span>+{m.overrun_pct?.toFixed(0)}% over</span>
             <span className="text-red-400">{formatCurrency(m.overrun_cost || 0)} overrun</span>
@@ -39,7 +39,7 @@ export function IssueCard({ trigger }: IssueCardProps) {
         );
       case "ORPHAN_RFI":
         return (
-          <div className="flex gap-4 text-sm">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <span>RFI: {m.rfi_number}</span>
             <span>{m.days_open}d open</span>
             <span>Priority: {m.priority}</span>
@@ -47,7 +47,7 @@ export function IssueCard({ trigger }: IssueCardProps) {
         );
       case "PENDING_CO":
         return (
-          <div className="flex gap-4 text-sm">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <span>{m.co_count} COs pending</span>
             <span className="text-yellow-400">{formatCurrency(m.pending_total || 0)}</span>
             <span>{m.pending_pct?.toFixed(1)}% of contract</span>

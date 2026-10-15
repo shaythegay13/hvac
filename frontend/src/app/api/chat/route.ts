@@ -133,11 +133,21 @@ function buildSystemPrompt(projectId: string | null): string {
   return base;
 }
 
+// gemini-2.0-flash shut down on 2026-06-01. Google's replacement for that id is gemini-3.6-flash.
+const CHAT_MODEL = "gemini-3.6-flash";
+
 export async function POST(req: Request) {
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    return new Response(
+      "The assistant needs GOOGLE_GENERATIVE_AI_API_KEY. Add it to frontend/.env.local. See frontend/.env.example.",
+      { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } }
+    );
+  }
+
   const { project_id, messages } = await req.json();
 
   const result = streamText({
-    model: google("gemini-2.0-flash"),
+    model: google(CHAT_MODEL),
     system: buildSystemPrompt(project_id ?? null),
     messages,
     maxSteps: 5,
